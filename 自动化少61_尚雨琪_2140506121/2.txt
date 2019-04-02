@@ -1,0 +1,284 @@
+clear
+close all,
+clc;
+[pic,map]=imread('C:\Users\Dell\Desktop\sixth assignment\lena.bmp');
+pic=double(pic);
+piczao=pic;       %噪声图片
+m=size(pic,1);    %矩阵大小m*n
+n=size(pic,2);
+snr=0.8;                    %信噪比
+sumzao=round(m*n*(1-snr));         %噪点总数
+choose=zeros(m,n);          %选点矩阵
+xcho=ceil(m*rand);
+ycho=ceil(n*rand);
+for i=1:sumzao
+    while(choose(xcho,ycho)~=0)
+        xcho=ceil(m*rand);
+        ycho=ceil(n*rand);
+    end
+    choose(xcho,ycho)=1;
+    if(i<sumzao/2)
+        piczao(xcho,ycho)=0;
+    else
+        piczao(xcho,ycho)=255;
+    end
+end
+piczao=uint8(piczao);
+imshow(piczao)
+title('椒盐噪声图')
+piczao=double(piczao);
+
+%时域滤波
+
+%扩展图像
+a=zeros(2,2);
+b=a;
+c=a;
+d=a;
+a=a+piczao(1,1);
+b=b+piczao(1,n);
+c=c+piczao(m,1);
+d=d+piczao(m,n);
+e=[piczao(1,:);piczao(1,:)];
+f=[piczao(:,1),piczao(:,1)];
+g=[piczao(m,:);piczao(m,:)];
+h=[piczao(:,n),piczao(:,n)];
+pickuo=[a,e,b;f,piczao,h;c,g,d];
+%高斯低通滤波器 固定标准差为1.5，选取模板大小为5*5 &中值低通滤波器
+%求取模块系数
+sum5=0;
+con5=zeros(5,5);
+center=3;
+len=5;
+fang5=2.25;
+for i=1:len
+    for j=1:len
+        con5(i,j)=exp(-((center-i)^2+(center-j)^2)/2/fang5)/2/pi/fang5;
+        sum5=sum5+con5(i,j);
+    end
+end
+picgaulow5=zeros(m,n); %高斯滤波后图像
+piczholow5=zeros(m,n); %中值滤波后图像
+piczhoxlow5=ones(m,n); %几何均值滤波
+piczhoxilow5=zeros(m,n);%谐波均值滤波
+Q=-2;
+piczhofanlow5=zeros(m,n);%谐波均值滤波
+piczhomulow5=zeros(m,n);%谐波均值滤波
+for i=1:m
+    for j=1:n
+        for k=1:5
+            for p=1:5
+                picgaulow5(i,j)=picgaulow5(i,j)+pickuo(i+k-1,j+p-1)*con5(k,p);
+                piczholow5(i,j)=piczholow5(i,j)+pickuo(i+k-1,j+p-1);
+                piczhoxlow5(i,j)=piczhoxlow5(i,j)*max(pickuo(i+k-1,j+p-1),1);
+                piczhoxilow5(i,j)=piczhoxilow5(i,j)+1/max(pickuo(i+k-1,j+p-1),1);
+                piczhofanlow5(i,j)=piczhofanlow5(i,j)+pickuo(i+k-1,j+p-1)^(Q+1);
+                piczhomulow5(i,j)=piczhomulow5(i,j)+pickuo(i+k-1,j+p-1)^Q;
+            end
+        end
+        picgaulow5(i,j)=picgaulow5(i,j)/sum5;
+        piczholow5(i,j)=piczholow5(i,j)/25;
+        piczhoxlow5(i,j)=piczhoxlow5(i,j)^(1/25);
+        piczhoxilow5(i,j)=25/piczhoxilow5(i,j);
+        piczhofanlow5(i,j)=piczhofanlow5(i,j)/piczhomulow5(i,j);
+    end
+end
+picgaulow5=uint8(picgaulow5);
+piczholow5=uint8(piczholow5);
+piczhoxlow5=uint8(piczhoxlow5);
+piczhoxilow5=uint8(piczhoxilow5);
+piczhofanlow5=uint8(piczhofanlow5);
+%imshow(picgaulow5)
+%title('空域高斯低通滤波')
+
+%subplot(2,2,1)
+%imshow(piczholow5)
+%title('空域均值滤波')
+%subplot(2,2,2)
+%imshow(piczhoxlow5)
+%title('空域几何均值滤波')
+%subplot(2,2,3)
+%imshow(piczhoxilow5)
+%title('空域谐波均值滤波')
+%subplot(2,2,4)
+%imshow(piczhofanlow5)
+%title('空域反谐波均值滤波(Q=-2)')
+
+%unsharp marking
+unsharp=zeros(m,n);
+for i=2:m
+    for j=2:m
+        unsharp(i-1,j-1)=pickuo(i+1,j+1)-0.7*(pickuo(i,j)+pickuo(i,j+1)+...
+            pickuo(i+1,j)+pickuo(i+1,j+2)+pickuo(i+2,j+1)+pickuo(i+2,j+2)+...
+            pickuo(i+2,j)+pickuo(i,j+2)-8*pickuo(i+1,j+1));
+    end
+end
+unsharp=uint8(unsharp);
+%subplot(2,2,1)
+%imshow(unsharp)
+%title('非锐化掩膜')
+
+%Sobel edge detector
+sobel=zeros(m,n);
+gx=[-1,0,1;-2,0,2;-1,0,1];
+gy=[1,2,1;0,0,0;-1,-2,-1];
+sobx=conv2(piczao,gx,'same');
+soby=conv2(piczao,gy,'same');
+for i=1:m
+    for j=1:n
+        sobel(i,j)=abs(sobx(i,j))+abs(soby(i,j));
+    end
+end
+soble=uint8(sobel);
+%subplot(2,2,2)
+%imshow(soble)
+%title('Sobel边缘检测')
+
+%Laplace edge detection
+la=[1,1,1;1,-8,1;1,1,1];
+Laplace=conv2(piczao,la,'same');
+Laplace=uint8(Laplace);
+%subplot(2,2,3)
+%imshow(Laplace)
+%title('Laplace边缘检测')
+
+%Canny algorithm
+piccan=uint8(piczao);
+Canny=edge(piccan,'canny');
+%subplot(2,2,4)
+%imshow(Canny)
+%title('Canny 算法')
+
+%频域滤波
+m1=2*m;
+n1=2*n;
+pickuo=zeros(m1,n1);
+dftpic=pickuo;
+gbutlow=pickuo;ggaulow=pickuo;
+dis=pickuo;
+%place center in the middle n1/2,m1/2
+for i=1:m
+    for j=1:n
+        pickuo(i,j)=piczao(i,j)*(-1)^(i+j);
+    end
+end
+
+dftpic=fft2(pickuo);
+d0=50; %cutoff frequency
+n0=3;  %order n
+
+%butterworth lowpass filters
+for i=1:m1
+    for j=1:n1
+        dis(i,j)=(i-m-1)^2+(j-n-1)^2;
+        gbutlow(i,j)=dftpic(i,j)/(1+(dis(i,j)^n0)/(d0^(2*n0)));
+    end
+end
+butkuolow=ifft2(gbutlow);
+picbutlow=zeros(m,n);
+for i=1:m
+    for j=1:n
+        picbutlow(i,j)=butkuolow(i,j)*(-1)^(i+j);
+    end
+end
+picbutlow=uint8(real(picbutlow));
+%subplot(1,2,1)
+%imshow(picbutlow)
+%title('频域巴特沃兹低通滤波')
+
+%Guassin lowpass filters
+for i=1:m1
+    for j=1:n1
+        ggaulow(i,j)=dftpic(i,j)*exp(-dis(i,j)/2/(d0^2));
+    end
+end
+picgaulow=zeros(m,n);
+gaukuolow=ifft2(ggaulow);
+for i=1:m
+    for j=1:n
+        picgaulow(i,j)=gaukuolow(i,j)*(-1)^(i+j);
+    end
+end
+picgaulow=uint8(picgaulow);
+%subplot(1,2,2)
+%imshow(picgaulow)
+%title('频域高斯低通滤波')
+
+%频域高通
+gbuthigh=zeros(m1,n1);
+for i=1:m1
+    for j=1:n1
+        gbuthigh(i,j)=dftpic(i,j)/(1+(d0^(2*n0))/(dis(i,j)^n0));
+    end
+end
+butkuohigh=ifft2(gbuthigh);
+picbuthigh=zeros(m,n);
+for i=1:m
+    for j=1:n
+        picbuthigh(i,j)=butkuohigh(i,j)*(-1)^(i+j);
+    end
+end
+picbuthigh=picbuthigh.*255/max(max(picbuthigh));
+picbuthigh=uint8(picbuthigh);
+%subplot(1,2,1)
+%imshow(picbuthigh)
+%title('频域巴特沃兹高通滤波')
+
+%Guassin highpass filters
+ggauhigh=zeros(m1,n1);
+picgauhigh=zeros(m,n);
+for i=1:m1
+    for j=1:n1
+        ggauhigh(i,j)=dftpic(i,j)*(1-exp(-dis(i,j)/2/(d0^2)));
+    end
+end
+gaukuohigh=ifft2(ggauhigh);
+for i=1:m
+    for j=1:n
+        picgauhigh(i,j)=gaukuohigh(i,j)*(-1)^(i+j);
+    end
+end
+picgauhigh=picgauhigh.*255/max(max(picgauhigh));
+picgauhigh=uint8(picgauhigh);
+%subplot(1,2,2)
+%imshow(picgauhigh)
+%title('频域高斯高通滤波')
+
+%laplace & unmask
+glap=zeros(m1,n1);
+for i=1:m1
+    for j=1:n1
+        glap(i,j)=dftpic(i,j)*(1+4*pi*pi*dis(i,j));
+    end
+end
+lapkuo=ifft2(glap);
+piclap=zeros(m,n);
+for i=1:m
+    for j=1:n
+        piclap(i,j)=lapkuo(i,j)*(-1)^(i+j);
+    end
+end
+piclap=uint8(piclap);
+%subplot(1,2,1)
+%imshow(piclap)
+%title('拉普拉斯高通滤波')
+
+%Unmask
+gunm=zeros(m1,n1);
+k1=2;k2=20;
+for i=1:m1
+    for j=1:n1
+        gunm(i,j)=dftpic(i,j)*(k1+k2*dis(i,j));
+    end
+end
+unmkuo=ifft2(gunm);
+picunm=zeros(m,n);
+for i=1:m
+    for j=1:n
+        picunm(i,j)=unmkuo(i,j)*(-1)^(i+j);
+    end
+end
+picunm=uint8(picunm);
+%subplot(1,2,2)
+%imshow(picunm)
+%yongtitle('Unmask高通滤波')
